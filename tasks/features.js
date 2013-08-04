@@ -1,5 +1,5 @@
 var es6Ext  = '.es6.js',
-    typeMap = { amd: 'AMD', cjs: 'CJS', globals: 'Globals' },
+    typeMap = { amd: 'AMD', cjs: 'CJS', umd: 'UMD', globals: 'Globals' },
     path    = require('path');
 
 module.exports = function(grunt) {
@@ -89,7 +89,7 @@ module.exports = function(grunt) {
         });
       }
 
-      ['amd', 'cjs', 'globals'].forEach(function(type) {
+      ['amd', 'umd', 'cjs', 'globals'].forEach(function(type) {
         var typedExt  = '.'+type+'.js',
             typeName  = typeMap[type],
             typedFile = file.src[0].replace(es6Ext, typedExt);

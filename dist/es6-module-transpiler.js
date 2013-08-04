@@ -6087,6 +6087,239 @@ parseYieldExpression: true
 /* vim: set sw=4 ts=4 et tw=80 : */
 
 },{}],2:[function(require,module,exports){
+var process=require("__browserify_process");function filter (xs, fn) {
+    var res = [];
+    for (var i = 0; i < xs.length; i++) {
+        if (fn(xs[i], i, xs)) res.push(xs[i]);
+    }
+    return res;
+}
+
+// resolves . and .. elements in a path array with directory names there
+// must be no slashes, empty elements, or device names (c:\) in the array
+// (so also no leading and trailing slashes - it does not distinguish
+// relative and absolute paths)
+function normalizeArray(parts, allowAboveRoot) {
+  // if the path tries to go above the root, `up` ends up > 0
+  var up = 0;
+  for (var i = parts.length; i >= 0; i--) {
+    var last = parts[i];
+    if (last == '.') {
+      parts.splice(i, 1);
+    } else if (last === '..') {
+      parts.splice(i, 1);
+      up++;
+    } else if (up) {
+      parts.splice(i, 1);
+      up--;
+    }
+  }
+
+  // if the path is allowed to go above the root, restore leading ..s
+  if (allowAboveRoot) {
+    for (; up--; up) {
+      parts.unshift('..');
+    }
+  }
+
+  return parts;
+}
+
+// Regex to split a filename into [*, dir, basename, ext]
+// posix version
+var splitPathRe = /^(.+\/(?!$)|\/)?((?:.+?)?(\.[^.]*)?)$/;
+
+// path.resolve([from ...], to)
+// posix version
+exports.resolve = function() {
+var resolvedPath = '',
+    resolvedAbsolute = false;
+
+for (var i = arguments.length; i >= -1 && !resolvedAbsolute; i--) {
+  var path = (i >= 0)
+      ? arguments[i]
+      : process.cwd();
+
+  // Skip empty and invalid entries
+  if (typeof path !== 'string' || !path) {
+    continue;
+  }
+
+  resolvedPath = path + '/' + resolvedPath;
+  resolvedAbsolute = path.charAt(0) === '/';
+}
+
+// At this point the path should be resolved to a full absolute path, but
+// handle relative paths to be safe (might happen when process.cwd() fails)
+
+// Normalize the path
+resolvedPath = normalizeArray(filter(resolvedPath.split('/'), function(p) {
+    return !!p;
+  }), !resolvedAbsolute).join('/');
+
+  return ((resolvedAbsolute ? '/' : '') + resolvedPath) || '.';
+};
+
+// path.normalize(path)
+// posix version
+exports.normalize = function(path) {
+var isAbsolute = path.charAt(0) === '/',
+    trailingSlash = path.slice(-1) === '/';
+
+// Normalize the path
+path = normalizeArray(filter(path.split('/'), function(p) {
+    return !!p;
+  }), !isAbsolute).join('/');
+
+  if (!path && !isAbsolute) {
+    path = '.';
+  }
+  if (path && trailingSlash) {
+    path += '/';
+  }
+  
+  return (isAbsolute ? '/' : '') + path;
+};
+
+
+// posix version
+exports.join = function() {
+  var paths = Array.prototype.slice.call(arguments, 0);
+  return exports.normalize(filter(paths, function(p, index) {
+    return p && typeof p === 'string';
+  }).join('/'));
+};
+
+
+exports.dirname = function(path) {
+  var dir = splitPathRe.exec(path)[1] || '';
+  var isWindows = false;
+  if (!dir) {
+    // No dirname
+    return '.';
+  } else if (dir.length === 1 ||
+      (isWindows && dir.length <= 3 && dir.charAt(1) === ':')) {
+    // It is just a slash or a drive letter with a slash
+    return dir;
+  } else {
+    // It is a full dirname, strip trailing slash
+    return dir.substring(0, dir.length - 1);
+  }
+};
+
+
+exports.basename = function(path, ext) {
+  var f = splitPathRe.exec(path)[2] || '';
+  // TODO: make this comparison case-insensitive on windows?
+  if (ext && f.substr(-1 * ext.length) === ext) {
+    f = f.substr(0, f.length - ext.length);
+  }
+  return f;
+};
+
+
+exports.extname = function(path) {
+  return splitPathRe.exec(path)[3] || '';
+};
+
+exports.relative = function(from, to) {
+  from = exports.resolve(from).substr(1);
+  to = exports.resolve(to).substr(1);
+
+  function trim(arr) {
+    var start = 0;
+    for (; start < arr.length; start++) {
+      if (arr[start] !== '') break;
+    }
+
+    var end = arr.length - 1;
+    for (; end >= 0; end--) {
+      if (arr[end] !== '') break;
+    }
+
+    if (start > end) return [];
+    return arr.slice(start, end - start + 1);
+  }
+
+  var fromParts = trim(from.split('/'));
+  var toParts = trim(to.split('/'));
+
+  var length = Math.min(fromParts.length, toParts.length);
+  var samePartsLength = length;
+  for (var i = 0; i < length; i++) {
+    if (fromParts[i] !== toParts[i]) {
+      samePartsLength = i;
+      break;
+    }
+  }
+
+  var outputParts = [];
+  for (var i = samePartsLength; i < fromParts.length; i++) {
+    outputParts.push('..');
+  }
+
+  outputParts = outputParts.concat(toParts.slice(samePartsLength));
+
+  return outputParts.join('/');
+};
+
+exports.sep = '/';
+
+},{"__browserify_process":3}],3:[function(require,module,exports){
+// shim for using process in browser
+
+var process = module.exports = {};
+
+process.nextTick = (function () {
+    var canSetImmediate = typeof window !== 'undefined'
+    && window.setImmediate;
+    var canPost = typeof window !== 'undefined'
+    && window.postMessage && window.addEventListener
+    ;
+
+    if (canSetImmediate) {
+        return function (f) { return window.setImmediate(f) };
+    }
+
+    if (canPost) {
+        var queue = [];
+        window.addEventListener('message', function (ev) {
+            if (ev.source === window && ev.data === 'process-tick') {
+                ev.stopPropagation();
+                if (queue.length > 0) {
+                    var fn = queue.shift();
+                    fn();
+                }
+            }
+        }, true);
+
+        return function nextTick(fn) {
+            queue.push(fn);
+            window.postMessage('process-tick', '*');
+        };
+    }
+
+    return function nextTick(fn) {
+        setTimeout(fn, 0);
+    };
+})();
+
+process.title = 'browser';
+process.browser = true;
+process.env = {};
+process.argv = [];
+
+process.binding = function (name) {
+    throw new Error('process.binding is not supported');
+}
+
+// TODO(shtylman)
+process.cwd = function () { return '/' };
+process.chdir = function (dir) {
+    throw new Error('process.chdir is not supported');
+};
+
+},{}],4:[function(require,module,exports){
 "use strict";
 var $__getDescriptors = function(object) {
   var descriptors = {}, name, names = Object.getOwnPropertyNames(object);
@@ -6208,7 +6441,7 @@ var AbstractCompiler = function() {
 module.exports = AbstractCompiler;
 
 
-},{"./compile_error":5,"./utils":11}],3:[function(require,module,exports){
+},{"./compile_error":7,"./utils":14}],5:[function(require,module,exports){
 "use strict";
 var $__superDescriptor = function(proto, name) {
   if (!proto) throw new TypeError('super is null');
@@ -6348,7 +6581,7 @@ var AMDCompiler = function($__super) {
 module.exports = AMDCompiler;
 
 
-},{"./abstract_compiler":2,"./source_modifier":10}],4:[function(require,module,exports){
+},{"./abstract_compiler":4,"./source_modifier":12}],6:[function(require,module,exports){
 "use strict";
 var $__superDescriptor = function(proto, name) {
   if (!proto) throw new TypeError('super is null');
@@ -6456,7 +6689,7 @@ var CJSCompiler = function($__super) {
 module.exports = CJSCompiler;
 
 
-},{"./abstract_compiler":2,"./source_modifier":10}],5:[function(require,module,exports){
+},{"./abstract_compiler":4,"./source_modifier":12}],7:[function(require,module,exports){
 "use strict";
 var $__superDescriptor = function(proto, name) {
   if (!proto) throw new TypeError('super is null');
@@ -6503,7 +6736,7 @@ var CompileError = function($__super) {
 module.exports = CompileError;
 
 
-},{}],6:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
 "use strict";
 var $__getDescriptors = function(object) {
   var descriptors = {}, name, names = Object.getOwnPropertyNames(object);
@@ -6521,6 +6754,7 @@ var $__getDescriptors = function(object) {
 };
 var AMDCompiler = require("./amd_compiler");
 var CJSCompiler = require("./cjs_compiler");
+var UMDCompiler = require("./umd_compiler");
 var GlobalsCompiler = require("./globals_compiler");
 var Parser = require("./parser");
 var Unique = require("./utils").Unique;
@@ -6551,6 +6785,9 @@ var Compiler = function() {
     toAMD: function() {
       return new AMDCompiler(this, this.options).stringify();
     },
+    toUMD: function() {
+      return new UMDCompiler(this, this.options).stringify();
+    },
     toCJS: function() {
       return new CJSCompiler(this, this.options).stringify();
     },
@@ -6563,7 +6800,7 @@ var Compiler = function() {
 module.exports = Compiler;
 
 
-},{"./amd_compiler":3,"./cjs_compiler":4,"./globals_compiler":7,"./parser":9,"./utils":11}],7:[function(require,module,exports){
+},{"./amd_compiler":5,"./cjs_compiler":6,"./globals_compiler":9,"./parser":11,"./umd_compiler":13,"./utils":14}],9:[function(require,module,exports){
 "use strict";
 var $__superDescriptor = function(proto, name) {
   if (!proto) throw new TypeError('super is null');
@@ -6719,13 +6956,13 @@ var GlobalsCompiler = function($__super) {
 module.exports = GlobalsCompiler;
 
 
-},{"./abstract_compiler":2,"./source_modifier":10}],8:[function(require,module,exports){
+},{"./abstract_compiler":4,"./source_modifier":12}],10:[function(require,module,exports){
 "use strict";
 var Compiler = require("./compiler");
 exports.Compiler = Compiler;
 
 
-},{"./compiler":6}],9:[function(require,module,exports){
+},{"./compiler":8}],11:[function(require,module,exports){
 "use strict";
 var $__getDescriptors = function(object) {
   var descriptors = {}, name, names = Object.getOwnPropertyNames(object);
@@ -6836,7 +7073,7 @@ var Parser = function() {
 module.exports = Parser;
 
 
-},{"esprima":1}],10:[function(require,module,exports){
+},{"esprima":1}],12:[function(require,module,exports){
 "use strict";
 var $__getDescriptors = function(object) {
   var descriptors = {}, name, names = Object.getOwnPropertyNames(object);
@@ -6894,7 +7131,176 @@ var SourceModifier = function() {
 module.exports = SourceModifier;
 
 
-},{}],11:[function(require,module,exports){
+},{}],13:[function(require,module,exports){
+"use strict";
+var $__superDescriptor = function(proto, name) {
+  if (!proto) throw new TypeError('super is null');
+  return Object.getPropertyDescriptor(proto, name);
+}, $__superCall = function(self, proto, name, args) {
+  var descriptor = $__superDescriptor(proto, name);
+  if (descriptor) {
+    if ('value'in descriptor) return descriptor.value.apply(self, args);
+    if (descriptor.get) return descriptor.get.call(self).apply(self, args);
+  }
+  throw new TypeError("Object has no method '" + name + "'.");
+}, $__getProtoParent = function(superClass) {
+  if (typeof superClass === 'function') {
+    var prototype = superClass.prototype;
+    if (Object(prototype) === prototype || prototype === null) return superClass.prototype;
+  }
+  if (superClass === null) return null;
+  throw new TypeError();
+}, $__getDescriptors = function(object) {
+  var descriptors = {}, name, names = Object.getOwnPropertyNames(object);
+  for (var i = 0; i < names.length; i++) {
+    var name = names[i];
+    descriptors[name] = Object.getOwnPropertyDescriptor(object, name);
+  }
+  return descriptors;
+}, $__createClass = function(object, staticObject, protoParent, superClass, hasConstructor) {
+  var ctor = object.constructor;
+  if (typeof superClass === 'function') ctor.__proto__ = superClass;
+  if (!hasConstructor && protoParent === null) ctor = object.constructor = function() {};
+  var descriptors = $__getDescriptors(object);
+  descriptors.constructor.enumerable = false;
+  ctor.prototype = Object.create(protoParent, descriptors);
+  Object.defineProperties(ctor, $__getDescriptors(staticObject));
+  return ctor;
+}, $__toObject = function(value) {
+  if (value == null) throw TypeError();
+  return Object(value);
+};
+var $__1;
+var AbstractCompiler = require("./abstract_compiler");
+var path = require("path");
+var __dependency1__ = require("./utils");
+var forEach = __dependency1__.forEach;
+var isEmpty = __dependency1__.isEmpty;
+var UMDCompiler = function($__super) {
+  'use strict';
+  var $__proto = $__getProtoParent($__super);
+  var $UMDCompiler = ($__createClass)({
+    constructor: function() {
+      $__superCall(this, $__proto, "constructor", arguments);
+    },
+    stringify: function() {
+      var deps = this.dependencyNames, argsAndPreamble = this.buildPreamble(deps), wrapperArgs = argsAndPreamble[0], preamble = argsAndPreamble[1], exports_ = this.exports, exportDefault = this.exportDefault, importDefault = this.importDefault, moduleName = this.moduleName, imports = this.imports, lines = this.lines, name, dependency, factoryCall, inParen, inner;
+      return this.build(function(s) {
+        if (!isEmpty(exports_)) {
+          deps.push('exports');
+          wrapperArgs.push('exports');
+        }
+        forEach(deps, function(dependency, i) {
+          if (/^\./.test(dependency)) {
+            deps[i] = path.join(moduleName, '..', dependency).replace(/[\\]/g, '/');
+          }
+        });
+        inner = s.capture(function() {
+          s.func(['factory'], function() {
+            try {
+              throw undefined;
+            } catch (doImport) {
+              s.append("if (typeof define === 'function' && define.amd) {");
+              s.indent();
+              s.line(function() {
+                s.call('define', function(arg) {
+                  if (moduleName) {
+                    arg(s.print(moduleName));
+                  }
+                  arg(s.linebreak);
+                  arg(s.print(deps));
+                  arg(s.linebreak);
+                  arg(function() {
+                    s.func(wrapperArgs, function() {
+                      factoryCall = s.capture(function() {
+                        s.call('factory', function(factoryArgs) {
+                          factoryArgs(wrapperArgs);
+                        });
+                      });
+                      if (exportDefault) {
+                        s.line("return " + factoryCall);
+                      } else {
+                        s.line(factoryCall);
+                      }
+                    });
+                  });
+                });
+              });
+              s.outdent();
+              s.append("} else if (typeof exports === 'object') {");
+              s.indent();
+              var cjsArgs = [];
+              doImport = function(name, import_, prop) {
+                cjsArgs.push(s.capture(function() {
+                  s.call('require', [s.print(import_)]);
+                }));
+              };
+              forEach(importDefault, doImport);
+              forEach(imports, doImport);
+              if (!isEmpty(exports_)) {
+                cjsArgs.push('exports');
+              }
+              factoryCall = s.capture(function() {
+                s.call('factory', function(factoryArgs) {
+                  factoryArgs(cjsArgs);
+                });
+              });
+              if (exportDefault) {
+                s.line('module.exports = ' + factoryCall);
+              } else {
+                s.line(factoryCall);
+              }
+              s.outdent();
+              s.append('} else {');
+              s.indent();
+              s.line("throw new Error('root UMD compilation not yet implemented')");
+              s.outdent();
+              s.append("}");
+            }
+          });
+        });
+        deps = s.unique('dependency');
+        inParen = s.capture(function() {
+          s.call(inner, function(args) {
+            args(function() {
+              s.func(wrapperArgs, function() {
+                s.useStrict();
+                forEach(imports, function(variables, import_) {
+                  if (Object.keys(variables).length == 1) {
+                    name = Object.keys(variables)[0];
+                  } else {
+                    dependency = deps.next();
+                    forEach(variables, function(alias, name) {
+                      if (name == 'default') {
+                        s.variable(alias, dependency);
+                      } else {
+                        s.variable(alias, dependency + "." + name);
+                      }
+                    });
+                  }
+                });
+                ($__1 = s).append.apply($__1, $__toObject(lines));
+                forEach(exports_, function(exportValue, exportName) {
+                  s.line("exports." + exportName + " = " + exportValue);
+                });
+                if (exportDefault) {
+                  s.line("return " + exportDefault);
+                }
+              });
+            });
+          });
+        });
+        s.line("(" + inParen + ")");
+        console.log(s.toString().split("\n").slice(0, 45).join("\n"));
+      });
+    }
+  }, {}, $__proto, $__super, false);
+  return $UMDCompiler;
+}(AbstractCompiler);
+module.exports = UMDCompiler;
+
+
+},{"./abstract_compiler":4,"./utils":14,"path":2}],14:[function(require,module,exports){
 "use strict";
 var $__getDescriptors = function(object) {
   var descriptors = {}, name, names = Object.getOwnPropertyNames(object);
@@ -6976,6 +7382,6 @@ exports.forEach = forEach;
 exports.string = string;
 
 
-},{}]},{},[8])(8)
+},{}]},{},[10])(10)
 });
 ;
