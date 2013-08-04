@@ -1,4 +1,4 @@
-(function(factory) {
+(function(root, factory) {
   if (typeof define === 'function' && define.amd) {
     define(
       [],
@@ -8,7 +8,7 @@
   } else if (typeof exports === 'object') {
     module.exports = factory();
   } else {
-    throw new Error('root UMD compilation not yet implemented');
+    return factory();
   }
 }(function() {
   "use strict";

@@ -8,7 +8,7 @@
   } else if (typeof exports === 'object') {
     factory(require("rsvp"));
   } else {
-    throw new Error('root UMD compilation not yet implemented');
+    factory(RSVP);
   }
 }(function(RSVP) {
   "use strict";

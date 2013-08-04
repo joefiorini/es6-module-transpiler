@@ -7253,7 +7253,12 @@ var UMDCompiler = function($__super) {
               s.outdent();
               s.append('} else {');
               s.indent();
-              s.line("throw new Error('root UMD compilation not yet implemented')");
+              factoryCall = s.capture(function() {
+                s.call('factory', function(factoryArgs) {
+                  factoryArgs(wrapperArgs);
+                });
+              });
+              s.line(factoryCall);
               s.outdent();
               s.append("}");
             }
