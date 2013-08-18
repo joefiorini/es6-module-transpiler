@@ -8,11 +8,11 @@
   } else if (typeof exports === 'object') {
     factory(require("ember"),require("rsvp"));
   } else {
-    factory(Ember, RSVP);
+    throw new Error('root UMD compilation not yet implemented');
   }
 }(function(__dependency1__, __dependency2__) {
   "use strict";
   var get = __dependency1__.get;
   var set = __dependency1__.set;
-  var makeDeferred = __dependency2__.defer;
 }));
+
