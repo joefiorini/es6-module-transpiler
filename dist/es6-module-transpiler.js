@@ -7296,7 +7296,6 @@ var UMDCompiler = function($__super) {
           });
         });
         s.line("(" + inParen + ")");
-        console.log(s.toString().split("\n").slice(0, 45).join("\n"));
       });
     }
   }, {}, $__proto, $__super, false);
