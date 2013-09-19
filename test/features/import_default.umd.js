@@ -2,13 +2,14 @@
   if (typeof define === 'function' && define.amd) {
     define(
       ["rsvp"],
-      function(RSVP) {
-        factory(RSVP);
+      function(__dependency1__) {
+        "use strict";
+        factory(__dependency1__);
       });
   } else if (typeof exports === 'object') {
     factory(require("rsvp"));
   } else {
-    factory(RSVP);
+    factory(window.RSVP);
   }
 }(function(RSVP) {
   "use strict";
